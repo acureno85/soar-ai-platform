@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Logs
+*.log
+
+# Docker volumes
+wazuh-data/
+qdrant_storage/
+
+# Secrets
+*.key
+*.pem
+*.crt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
