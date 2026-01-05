@@ -1,0 +1,247 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wazuh-alerts",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        0
+      ],
+      "id": "b3cf4940-5f1e-464a-b0dc-9e6aaad02926",
+      "name": "SOAR - Wazuh AI Analysis",
+      "webhookId": "0957e271-7c57-4baf-a731-7ce7700b961e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://soar_ollama:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama3.2:3b\",\n  \"prompt\": \"Eres un analista SOC experto. Analiza esta alerta usando el contexto de MITRE ATT&CK.\\n\\nCONTEXTO MITRE ATT&CK RELEVANTE:\\n- T1110.001 (Password Guessing): Adversarios sin conocimiento previo de credenciales pueden adivinar contraseñas sistemáticamente.\\n- T1110.002 (Password Cracking): Adversarios pueden usar técnicas de cracking para recuperar contraseñas.\\n- T1110.003 (Password Spraying): Uso de una contraseña común contra muchas cuentas.\\n\\nALERTA:\\nDescripción: {{ $json.body.alert.rule.description }}\\nNivel: {{ $json.body.alert.rule.level }}\\nMITRE ATT&CK: {{ $json.body.alert.rule.mitre.technique }}\\nIP Atacante: {{ $json.body.alert.data.srcip }}\\nUsuario objetivo: {{ $json.body.alert.data.srcuser }}\\n\\nResponde en formato estructurado:\\n1) SEVERIDAD: [Alta/Media/Baja]\\n2) TÉCNICA MITRE: [ID y nombre]\\n3) DESCRIPCIÓN: [Explicación del ataque]\\n4) INDICADORES DE COMPROMISO: [IOCs relevantes]\\n5) RECOMENDACIONES: [Acciones de mitigación]\",\n  \"stream\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -176,
+        128
+      ],
+      "id": "8d7c6bff-bc9c-4c48-809c-44f14cb1b5d1",
+      "name": "Ollama AI Analysis"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/grc/map-alert",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"rule_description\": \"{{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.rule.description }}\",\n  \"rule_level\": {{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.rule.level }},\n  \"agent_name\": \"{{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.agent.name }}\",\n  \"mitre_id\": \"{{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.rule.mitre.id || 'N/A' }}\",\n  \"mitre_tactic\": \"{{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.rule.mitre.tactic || 'N/A' }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -176,
+        -144
+      ],
+      "id": "2d2c7b43-bd35-4037-a91d-00d166b277ad",
+      "name": "GRC Compliance Mapping"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e4da01eb-53b8-4e60-9061-04e24b64bbfc",
+              "name": "report.timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "359f7f2f-24dd-47d9-8aa4-cbaf94062e39",
+              "name": "report.alert",
+              "value": "={{ $('SOAR - Wazuh AI Analysis').item.json.body.alert }}",
+              "type": "object"
+            },
+            {
+              "id": "c5ab288e-7f26-4b6e-9dbd-9dcc43aa5716",
+              "name": "report.ai_soc_analysis",
+              "value": "={{ $('Ollama AI Analysis').item.json.response }}",
+              "type": "string"
+            },
+            {
+              "id": "47a88759-5465-41fd-9f1e-896febc7ede6",
+              "name": "report.grc_compliance",
+              "value": "={{ $('GRC Compliance Mapping').item.json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        0
+      ],
+      "id": "b42da71d-4a31-4f63-803a-677d65972f00",
+      "name": "Format Complete Report"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        96,
+        0
+      ],
+      "id": "a7d213c4-902f-45ae-89f8-21ef18a11661",
+      "name": "Merge AI + GRC"
+    },
+    {
+      "parameters": {
+        "chatId": "1413634675",
+        "text": "=🚨 <b>ALERTA DE SEGURIDAD</b>  📋 <b>Regla:</b> {{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.rule.description }} ⚠️ <b>Nivel:</b> {{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.rule.level }} 🖥️ <b>Agente:</b> {{ $('SOAR - Wazuh AI Analysis').item.json.body.alert.agent.name }}  🤖 <b>Análisis IA:</b> {{ $('Ollama AI Analysis').item.json.response.substring(0, 500) }}...  🏛️ <b>Controles ISO 27001:</b> {{ $('GRC Compliance Mapping').item.json.compliance_mapping.iso_27001.map(c => '• ' + c.id + ': ' + c.name).join('\\n') }}  📊 <b>Controles NIST:</b> {{ $('GRC Compliance Mapping').item.json.compliance_mapping.nist_800_53.map(c => '• ' + c.id + ': ' + c.name).join('\\n') }}  ⏰ {{ $now.format('yyyy-MM-dd HH:mm:ss') }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "dfe29594-62ca-47ac-be1d-6e907b8b6335",
+      "name": "Telegram Alert",
+      "webhookId": "c3ffc618-8178-4535-85f7-597c9bd9e592",
+      "credentials": {
+        "telegramApi": {
+          "id": "S6ivLZZIOqxqresO",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "SOAR - Wazuh AI Analysis": [
+      {
+        "json": {
+          "headers": {
+            "host": "localhost:5678",
+            "user-agent": "curl/8.14.1",
+            "accept": "*/*",
+            "content-type": "application/json",
+            "content-length": "353"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "alert": {
+              "rule": {
+                "id": "5710",
+                "level": 10,
+                "description": "sshd: Attempt to login using a non-existent user"
+              },
+              "agent": {
+                "name": "test-agent",
+                "ip": "192.168.1.100"
+              },
+              "source": {
+                "ip": "10.0.0.50"
+              },
+              "timestamp": "2026-01-05T04:30:00.000Z"
+            }
+          },
+          "webhookUrl": "http://n8n:5678/webhook-test/wazuh-alerts",
+          "executionMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "SOAR - Wazuh AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "GRC Compliance Mapping",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ollama AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GRC Compliance Mapping": {
+      "main": [
+        [
+          {
+            "node": "Merge AI + GRC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge AI + GRC",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge AI + GRC": {
+      "main": [
+        [
+          {
+            "node": "Format Complete Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Complete Report": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "9405d10d-dcbe-4d7f-baca-6e9882300b64",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "22c4cb887d84fb139a7db07d16871e2472915c6a1e514967b2aa41f26aa86452"
+  },
+  "id": "L5KLDEzJYSihjaBe",
+  "tags": []
+}
